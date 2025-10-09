@@ -14,7 +14,7 @@ import threading
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'nexlattice-secret-key'
 CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Network state
 network_state = {
@@ -281,5 +281,5 @@ def init_app():
 
 if __name__ == '__main__':
     init_app()
-    socketio.run(app, host='0.0.0.0', port=8080, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=8080, debug=True)
 
