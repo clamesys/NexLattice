@@ -269,6 +269,7 @@ See [`tests/test_plan.md`](tests/test_plan.md) for comprehensive testing procedu
 ## Documentation
 
 - **[Architecture](docs/architecture.md)**: System design and components
+- **[Architecture Diagrams](docs/ARCHITECTURE_DIAGRAM.md)**: Visual Mermaid diagrams (12 detailed diagrams)
 - **[Protocol Design](docs/protocol_design.md)**: Message formats and protocol specification
 - **[Setup Instructions](docs/setup_instructions.md)**: Complete deployment guide
 - **[Test Plan](tests/test_plan.md)**: Testing procedures and scenarios
