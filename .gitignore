@@ -24,7 +24,7 @@ wheels/
 *.egg
 
 # MicroPython
-*.mpy
+#*.mpy
 
 # IDE
 .vscode/
@@ -59,9 +59,9 @@ dashboard/*.db
 dashboard/instance/
 
 # ESP32 specific
-*.bin
-firmware/
+# *.bin
+# firmware/
 
 # Documentation builds
-docs/_build/
+# docs/_build/
 
