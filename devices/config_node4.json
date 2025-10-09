@@ -1,0 +1,15 @@
+{
+  "node_id": "node_004",
+  "node_name": "NexLattice Node 4",
+  "wifi_ssid": "YourNetworkSSID",
+  "wifi_password": "YourNetworkPassword",
+  "discovery_port": 5000,
+  "message_port": 5001,
+  "dashboard_ip": "192.168.1.100",
+  "dashboard_port": 8080,
+  "encryption_enabled": true,
+  "max_peers": 10,
+  "discovery_interval": 30,
+  "health_check_interval": 10
+}
+

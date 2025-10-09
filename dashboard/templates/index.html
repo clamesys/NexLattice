@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexLattice Dashboard</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(16, 185, 129, 0.1);
+            border-bottom: 2px solid #10b981;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: inline-block;
+        }
+
+        .header .subtitle {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            padding: 1.5rem 2rem;
+            background: rgba(30, 41, 59, 0.5);
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid #10b981;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .stat-card .label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #10b981;
+            margin-top: 0.5rem;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 1.5rem;
+            padding: 1.5rem 2rem;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        .panel {
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid #10b981;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .panel-title {
+            font-size: 1.25rem;
+            color: #34d399;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #10b981;
+        }
+
+        #network-viz {
+            height: 600px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+
+        .node-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .node-item {
+            background: rgba(51, 65, 85, 0.5);
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-radius: 8px;
+            border-left: 4px solid #10b981;
+            transition: all 0.2s;
+        }
+
+        .node-item:hover {
+            background: rgba(51, 65, 85, 0.8);
+            transform: translateX(4px);
+        }
+
+        .node-item.offline {
+            border-left-color: #ef4444;
+            opacity: 0.6;
+        }
+
+        .node-item .node-name {
+            font-weight: bold;
+            color: #10b981;
+            margin-bottom: 0.25rem;
+        }
+
+        .node-item .node-id {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+        }
+
+        .node-item .node-stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
+        .node-item .node-stats span {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.offline {
+            background: #ef4444;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .message-log {
+            max-height: 300px;
+            overflow-y: auto;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .message-item {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background: rgba(51, 65, 85, 0.5);
+            border-radius: 6px;
+            border-left: 3px solid #34d399;
+            font-size: 0.85rem;
+        }
+
+        .message-item .msg-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+            color: #94a3b8;
+        }
+
+        .message-item .msg-content {
+            color: #e2e8f0;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(51, 65, 85, 0.3);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #10b981;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #34d399;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.5rem 1rem;
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid #10b981;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .connection-status.disconnected {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">
+        <span class="status-indicator"></span>
+        <span>Connected</span>
+    </div>
+
+    <div class="header">
+        <h1>🌐 NexLattice Dashboard</h1>
+        <p class="subtitle">Real-time Mesh Network Monitoring</p>
+    </div>
+
+    <div class="stats-bar">
+        <div class="stat-card">
+            <div class="label">Total Nodes</div>
+            <div class="value" id="totalNodes">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Active Nodes</div>
+            <div class="value" id="activeNodes">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Network Links</div>
+            <div class="value" id="totalLinks">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Messages Sent</div>
+            <div class="value" id="messagesSent">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Messages Forwarded</div>
+            <div class="value" id="messagesForwarded">0</div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div>
+            <div class="panel">
+                <div class="panel-title">Network Topology</div>
+                <div id="network-viz"></div>
+            </div>
+            
+            <div class="panel" style="margin-top: 1.5rem;">
+                <div class="panel-title">Message Log</div>
+                <div class="message-log" id="messageLog">
+                    <p style="color: #64748b; text-align: center;">No messages yet...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">Active Nodes</div>
+            <div class="node-list" id="nodeList">
+                <p style="color: #64748b; text-align: center;">No nodes connected...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
+

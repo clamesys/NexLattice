@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# MicroPython
+*.mpy
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Node modules (if any JS tools used)
+node_modules/
+
+# Environment variables
+.env
+.env.local
+
+# Simulation data
+*.pkl
+simulation_results/
+
+# Dashboard
+dashboard/*.db
+dashboard/instance/
+
+# ESP32 specific
+*.bin
+firmware/
+
+# Documentation builds
+docs/_build/
+
