@@ -23,23 +23,23 @@ NexLattice enables **device-to-device communication** without requiring a centra
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │                   NexLattice Network                     │
-├─────────────────────────────────────────────────────────┤
-│  ┌──────┐       ┌──────┐       ┌──────┐                │
-│  │Node 1│◄─────►│Node 2│◄─────►│Node 3│                │
-│  └───┬──┘       └───┬──┘       └───┬──┘                │
-│      │              │              │                     │
-│      └──────────────┼──────────────┘                     │
-│                     │                                    │
-│                 ┌───▼──┐                                 │
-│                 │Node 4│                                 │
-│                 └───┬──┘                                 │
-│                     │                                    │
-│                 ┌───▼──┐                                 │
-│                 │Node 5│                                 │
-│                 └──────┘                                 │
-└─────────────────────────────────────────────────────────┘
+├──────────────────────────────────────────────────────────┤
+│          ┌──────┐       ┌──────┐       ┌──────┐          │
+│          │Node 1│◄─────►│Node 2│◄─────►│Node 3│          │
+│          └───┬──┘       └───┬──┘       └───┬──┘          │
+│              │              │              │             │
+│              └──────────────┼──────────────┘             │
+│                             │                            │
+│                         ┌───▼──┐                         │
+│                         │Node 4│                         │
+│                         └───┬──┘                         │
+│                             │                            │
+│                         ┌───▼──┐                         │
+│                         │Node 5│                         │
+│                         └──────┘                         │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
@@ -201,8 +201,8 @@ Nodes report status every 60 seconds via HTTP:
 
 Dashboard pushes updates to web clients via WebSocket for real-time visualization.
 
-## Dashboard Features
-
+## Dashboard Features & SS
+![Dashboard Preview](docs/dashboard_ss_0.png)
 - **Live Network Topology**: Interactive D3.js graph showing nodes and connections
 - **Node Status**: Real-time health monitoring with latency measurements
 - **Message Log**: Live feed of all messages flowing through the network
