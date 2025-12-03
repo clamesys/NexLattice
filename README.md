@@ -22,24 +22,45 @@ NexLattice enables **device-to-device communication** without requiring a centra
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                   NexLattice Network                     │
-├──────────────────────────────────────────────────────────┤
-│          ┌──────┐       ┌──────┐       ┌──────┐          │
-│          │Node 1│◄─────►│Node 2│◄─────►│Node 3│          │
-│          └───┬──┘       └───┬──┘       └───┬──┘          │
-│              │              │              │             │
-│              └──────────────┼──────────────┘             │
-│                             │                            │
-│                         ┌───▼──┐                         │
-│                         │Node 4│                         │
-│                         └───┬──┘                         │
-│                             │                            │
-│                         ┌───▼──┐                         │
-│                         │Node 5│                         │
-│                         └──────┘                         │
-└──────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph "IoT Devices Layer"
+        N1[ESP32 Node 1]
+        N2[ESP32 Node 2]
+        N3[ESP32 Node 3]
+        N4[ESP32 Node 4]
+        N5[ESP32 Node 5]
+    end
+    
+    subgraph "WiFi Mesh Network"
+        N1 <-->|Encrypted Messages| N2
+        N2 <-->|Encrypted Messages| N3
+        N3 <-->|Encrypted Messages| N4
+        N4 <-->|Encrypted Messages| N5
+        N1 -.->|Discovery Broadcast| N3
+        N2 -.->|Discovery Broadcast| N5
+    end
+    
+    subgraph "Monitoring Layer"
+        Dashboard[Web Dashboard<br/>Flask + SocketIO]
+        WebClient[Web Browser<br/>D3.js Visualization]
+    end
+    
+    N1 -->|HTTP Status| Dashboard
+    N2 -->|HTTP Status| Dashboard
+    N3 -->|HTTP Status| Dashboard
+    N4 -->|HTTP Status| Dashboard
+    N5 -->|HTTP Status| Dashboard
+    
+    Dashboard <-->|WebSocket| WebClient
+    
+    style N1 fill:#10b981,stroke:#059669,color:#fff
+    style N2 fill:#10b981,stroke:#059669,color:#fff
+    style N3 fill:#10b981,stroke:#059669,color:#fff
+    style N4 fill:#10b981,stroke:#059669,color:#fff
+    style N5 fill:#10b981,stroke:#059669,color:#fff
+    style Dashboard fill:#34d399,stroke:#059669,color:#000
+    style WebClient fill:#6ee7b7,stroke:#059669,color:#000
 ```
 
 ## Quick Start
