@@ -23,8 +23,11 @@ class NexLatticeNode:
         self.node_id = self.config['node_id']
         self.node_name = self.config['node_name']
         
+        # Get PSK from config if available
+        psk = self.config.get('pre_shared_key')
+        
         # Initialize managers
-        self.crypto = CryptoManager(self.node_id)
+        self.crypto = CryptoManager(self.node_id, psk=psk)
         self.network = NetworkManager(self.node_id, self.node_name, self.config)
         self.router = MessageRouter(self.node_id, self.network, self.crypto)
         
@@ -75,6 +78,8 @@ class NexLatticeNode:
                 self.handle_discovery_response(msg_data, sender_addr)
             elif msg_type == 'KEY_EXCHANGE':
                 self.handle_key_exchange(msg_data, sender_addr)
+            elif msg_type == 'AUTH_RESPONSE':
+                self.handle_auth_response(msg_data, sender_addr)
             elif msg_type == 'DATA':
                 self.handle_data_message(msg_data, sender_addr)
             elif msg_type == 'PING':
@@ -93,17 +98,21 @@ class NexLatticeNode:
         
         print(f"🔍 Discovery from {peer_name} ({peer_id})")
         
-        # Add peer
-        self.network.add_peer(peer_id, peer_name, sender_addr[0], public_key)
+        # Generate authentication challenge
+        challenge = self.crypto.generate_challenge(peer_id)
         
-        # Send response
+        # Send discovery response with challenge
         response = {
             'type': 'DISCOVERY_RESPONSE',
             'node_id': self.node_id,
             'node_name': self.node_name,
             'public_key': self.crypto.get_public_key(),
+            'challenge': challenge,
             'timestamp': time.time()
         }
+        
+        # Sign the response
+        response['signature'] = self.crypto.sign_message(response)
         
         self.network.send_direct(json.dumps(response), sender_addr[0])
     
@@ -112,23 +121,84 @@ class NexLatticeNode:
         peer_id = msg_data.get('node_id')
         peer_name = msg_data.get('node_name')
         public_key = msg_data.get('public_key')
+        signature = msg_data.get('signature')
+        challenge = msg_data.get('challenge')
         
-        print(f"✅ Discovery response from {peer_name} ({peer_id})")
+        # Verify signature
+        if not signature or not self.crypto.verify_signature(msg_data, signature, peer_id):
+            print(f"🚫 Rejecting {peer_name} ({peer_id}): Invalid signature")
+            return  # Reject unauthorized node
         
-        # Add peer
-        self.network.add_peer(peer_id, peer_name, sender_addr[0], public_key)
+        # If challenge provided, compute and send response
+        if challenge:
+            challenge_response = self.crypto.compute_challenge_response(challenge)
+            
+            # Send challenge response
+            auth_msg = {
+                'type': 'AUTH_RESPONSE',
+                'node_id': self.node_id,
+                'challenge_response': challenge_response,
+                'timestamp': time.time()
+            }
+            auth_msg['signature'] = self.crypto.sign_message(auth_msg)
+            self.network.send_direct(json.dumps(auth_msg), sender_addr[0])
+        
+        print(f"✅ Discovery response from {peer_name} ({peer_id}) - signature verified")
+        
+        # Add peer as authenticated
+        self.network.add_peer(peer_id, peer_name, sender_addr[0], public_key, hop_distance=1, authenticated=True)
+        self.network.mark_peer_authenticated(peer_id)
     
     def handle_key_exchange(self, msg_data, sender_addr):
         """Handle encrypted key exchange"""
         peer_id = msg_data.get('node_id')
         session_key = msg_data.get('session_key')
+        signature = msg_data.get('signature')
+        
+        # Verify signature
+        if not signature or not self.crypto.verify_signature(msg_data, signature, peer_id):
+            print(f"🚫 Rejecting key exchange from {peer_id}: Invalid signature")
+            return
         
         # Establish secure session
         if self.crypto.establish_session(peer_id, session_key):
             print(f"🔐 Secure session established with {peer_id}")
     
+    def handle_auth_response(self, msg_data, sender_addr):
+        """Handle authentication response (challenge-response)"""
+        peer_id = msg_data.get('node_id')
+        challenge_response = msg_data.get('challenge_response')
+        signature = msg_data.get('signature')
+        
+        # Verify signature first
+        if not signature or not self.crypto.verify_signature(msg_data, signature, peer_id):
+            print(f"🚫 Rejecting auth response from {peer_id}: Invalid signature")
+            return
+        
+        # Verify challenge response
+        if not self.crypto.verify_challenge_response(peer_id, challenge_response):
+            print(f"🚫 Rejecting {peer_id}: Authentication failed")
+            # Remove peer if it was previously added
+            self.network.remove_peer(peer_id)
+            return
+        
+        # Authentication successful
+        print(f"✅ Authentication successful for {peer_id}")
+        self.network.mark_peer_authenticated(peer_id)
+    
     def handle_data_message(self, msg_data, sender_addr):
         """Handle data message (direct or forwarded)"""
+        # Verify signature first (mandatory)
+        signature = msg_data.get('signature')
+        if not signature:
+            print(f"🚫 Rejecting message: Missing signature")
+            return
+        
+        # Verify signature
+        if not self.crypto.verify_signature(msg_data, signature, msg_data.get('source')):
+            print(f"🚫 Rejecting message: Invalid signature")
+            return
+        
         dest_id = msg_data.get('destination')
         source_id = msg_data.get('source')
         payload = msg_data.get('payload')
@@ -136,11 +206,15 @@ class NexLatticeNode:
         
         # Check if message is for this node
         if dest_id == self.node_id:
-            print(f"📨 Message from {source_id}: {payload}")
             # Decrypt if encrypted
             if msg_data.get('encrypted'):
-                payload = self.crypto.decrypt(payload, source_id)
-                print(f"🔓 Decrypted: {payload}")
+                try:
+                    payload = self.crypto.decrypt(payload, source_id)
+                    print(f"🔓 Decrypted: {payload}")
+                except Exception as e:
+                    print(f"❌ Decryption failed: {e}")
+                    return
+            print(f"📨 Message from {source_id}: {payload}")
         else:
             # Forward message
             print(f"📤 Forwarding message from {source_id} to {dest_id}")
@@ -172,8 +246,13 @@ class NexLatticeNode:
             'timestamp': time.time()
         }
         
+        # Encrypt if requested
         if encrypted:
+            # Encrypt the payload
             message['payload'] = self.crypto.encrypt(payload, dest_id)
+        
+        # Sign message (mandatory) - sign after encryption
+        message['signature'] = self.crypto.sign_message(message)
         
         # Use router to send
         success = self.router.route_message(message)

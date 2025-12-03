@@ -29,7 +29,7 @@ class NetworkManager:
         self.message_socket = None
         
         # Peers
-        self.peers = {}  # peer_id: {name, ip, public_key, last_seen, latency}
+        self.peers = {}  # peer_id: {name, ip, public_key, last_seen, latency, hop_distance, authenticated}
         
         # State
         self.connected = False
@@ -170,10 +170,16 @@ class NetworkManager:
             print(f"⚠️  Dashboard send failed: {e}")
             return False
     
-    def add_peer(self, peer_id, peer_name, peer_ip, public_key):
+    def add_peer(self, peer_id, peer_name, peer_ip, public_key, hop_distance=1, authenticated=False):
         """Add or update peer information"""
         if peer_id == self.node_id:
             return  # Don't add self
+        
+        # If peer already exists, update info but preserve hop_distance if not provided
+        if peer_id in self.peers:
+            existing_peer = self.peers[peer_id]
+            if hop_distance == 1:  # Only update hop_distance if explicitly provided
+                hop_distance = existing_peer.get('hop_distance', 1)
         
         self.peers[peer_id] = {
             'name': peer_name,
@@ -181,10 +187,13 @@ class NetworkManager:
             'public_key': public_key,
             'last_seen': time.time(),
             'latency': None,
-            'connected': True
+            'hop_distance': hop_distance,
+            'connected': True,
+            'authenticated': authenticated
         }
         
-        print(f"👥 Peer added: {peer_name} ({peer_ip})")
+        status = "✅" if authenticated else "⚠️"
+        print(f"{status} Peer added: {peer_name} ({peer_ip}) [hops: {hop_distance}, auth: {authenticated}]")
     
     def get_peer(self, peer_id):
         """Get peer information"""
@@ -199,10 +208,31 @@ class NetworkManager:
                 'ip': info['ip'],
                 'last_seen': info['last_seen'],
                 'latency': info.get('latency'),
-                'connected': info.get('connected', True)
+                'hop_distance': info.get('hop_distance', 1),
+                'connected': info.get('connected', True),
+                'authenticated': info.get('authenticated', False)
             }
             for peer_id, info in self.peers.items()
         ]
+    
+    def update_peer_hop_distance(self, peer_id, hop_distance):
+        """Update hop distance for a peer"""
+        if peer_id in self.peers:
+            self.peers[peer_id]['hop_distance'] = hop_distance
+            self.peers[peer_id]['last_seen'] = time.time()
+    
+    def mark_peer_authenticated(self, peer_id):
+        """Mark peer as authenticated"""
+        if peer_id in self.peers:
+            self.peers[peer_id]['authenticated'] = True
+            print(f"🔐 Peer {peer_id} authenticated")
+    
+    def remove_peer(self, peer_id):
+        """Remove peer from peer list (for unauthorized nodes)"""
+        if peer_id in self.peers:
+            peer_name = self.peers[peer_id]['name']
+            del self.peers[peer_id]
+            print(f"🚫 Peer removed: {peer_name} ({peer_id})")
     
     def check_peer_health(self):
         """Check health of all peers and update status"""

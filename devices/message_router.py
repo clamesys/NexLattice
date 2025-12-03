@@ -66,6 +66,13 @@ class MessageRouter:
         message['hop_count'] = hop_count + 1
         message['msg_id'] = msg_id
         
+        # Update hop distances for peers based on this message
+        source_id = message.get('source')
+        if source_id:
+            # Update hop distance: source is (hop_count + 1) hops away
+            new_hop_distance = hop_count + 1
+            self.network.update_peer_hop_distance(source_id, new_hop_distance)
+        
         # Cache message
         self.message_cache[msg_id] = time.time()
         self._cleanup_cache()
@@ -106,7 +113,7 @@ class MessageRouter:
         """Find next hop for destination using routing table"""
         return self.routing_table.get(dest_id)
     
-    def update_routing_table(self, dest_id, next_hop_id, metric=1):
+    def update_routing_table(self, dest_id, next_hop_id, metric=1, hop_distance=1):
         """Update routing table entry"""
         # Simple routing: just store next hop
         # In production, implement distance-vector or link-state routing
@@ -118,9 +125,16 @@ class MessageRouter:
             self.routing_table[dest_id] = {
                 'next_hop': next_hop_id,
                 'metric': metric,
+                'hop_distance': hop_distance,
                 'updated': time.time()
             }
-            print(f"🗺️  Route updated: {dest_id} via {next_hop_id} (metric: {metric})")
+            print(f"🗺️  Route updated: {dest_id} via {next_hop_id} (metric: {metric}, hops: {hop_distance})")
+            
+            # Update peer hop distance if peer exists
+            peer = self.network.get_peer(dest_id)
+            if peer:
+                self.network.update_peer_hop_distance(dest_id, hop_distance)
+            
             return True
         
         return False
@@ -134,7 +148,8 @@ class MessageRouter:
         
         for peer in peers:
             if peer['connected']:
-                self.update_routing_table(peer['id'], peer['id'], metric=1)
+                hop_distance = peer.get('hop_distance', 1)
+                self.update_routing_table(peer['id'], peer['id'], metric=1, hop_distance=hop_distance)
         
         # For multi-hop routing, would need to exchange routing info with peers
         print(f"🗺️  Routing table built: {len(self.routing_table)} routes")
@@ -155,6 +170,7 @@ class MessageRouter:
         return {
             'routes': len(self.routing_table),
             'cached_messages': len(self.message_cache),
-            'routing_table': self.routing_table
+            'routing_table': self.routing_table,
+            'max_hops': self.max_hops
         }
 
