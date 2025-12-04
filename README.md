@@ -136,28 +136,29 @@ The simulator will:
 
 ```
 NexLattice/
-├── devices/                    # ESP32 MicroPython code
+├── compatibility/             # compatibility testing code
+├── devices/                   # ESP32 MicroPython code
 │   ├── node_main.py           # Main node logic
 │   ├── network_manager.py     # WiFi and communication
 │   ├── crypto_utils.py        # Encryption and keys
 │   ├── message_router.py      # Routing algorithm
 │   └── config.json            # Node configuration
-├── dashboard/                  # Web dashboard
+├── dashboard/                 # Web dashboard
 │   ├── app.py                 # Flask backend
 │   ├── templates/
 │   │   └── index.html         # Dashboard UI
 │   └── static/
 │       └── dashboard.js       # Real-time visualization
-├── simulator/                  # Virtual testing
+├── simulator/                 # Virtual testing
 │   └── network_simulator.py   # Software simulation
-├── docs/                       # Documentation
+├── docs/                      # Documentation
 │   ├── architecture.md        # System architecture
 │   ├── protocol_design.md     # Protocol specification
 │   └── setup_instructions.md  # Deployment guide
-├── tests/                      # Test plans
+├── tests/                     # Test plans
 │   └── test_plan.md           # Comprehensive testing
-├── logo/                       # Project logos
-└── requirements.txt            # Python dependencies
+├── logo/                      # Project logos
+└── requirements.txt           # Python dependencies
 ```
 
 ## How It Works
