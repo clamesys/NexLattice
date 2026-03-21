@@ -1,0 +1,165 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\hyphenation{Nex-Lattice micro-controller}
+
+\begin{document}
+
+\title{NexLattice: A Secure Application-Layer Wi-Fi Mesh Protocol for Resource-Constrained IoT Devices}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Debayangshu Sen}
+\IEEEauthorblockA{\textit{Faculty of Computer Technology} \\
+\textit{Assam down town University} \\
+Guwahati, Assam, India}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Vivek Upadhaya}
+\IEEEauthorblockA{\textit{Faculty of Computer Technology} \\
+\textit{Assam down town University} \\
+Guwahati, Assam, India}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Rajdeep Roy}
+\IEEEauthorblockA{\textit{Faculty of Computer Technology} \\
+\textit{Assam down town University} \\
+Guwahati, Assam, India}
+\and
+% Empty column: keeps the 4th author centered under the 2nd (IEEEtran uses 3 columns per row)
+\IEEEauthorblockN{\phantom{2\textsuperscript{nd} Vivek Upadhaya}}
+\IEEEauthorblockA{\phantom{\textit{Faculty of Computer Technology}}\\\phantom{\textit{Assam down town University}}\\\phantom{Guwahati, Assam, India}}
+\and
+\IEEEauthorblockN{4\textsuperscript{th} Dr. Debashis Dev Misra}
+\IEEEauthorblockA{\textit{Associate Professor, Faculty of Computer Technology} \\
+\textit{Assam down town University} \\
+Guwahati, Assam, India}
+\and
+\IEEEauthorblockN{\phantom{2\textsuperscript{nd} Vivek Upadhaya}}
+\IEEEauthorblockA{\phantom{\textit{Faculty of Computer Technology}}\\\phantom{\textit{Assam down town University}}\\\phantom{Guwahati, Assam, India}}
+}
+
+\maketitle
+
+\begin{abstract}
+Many Internet of Things deployments assume a central gateway or proprietary radio stacks, which raises cost, single-point-of-failure risk, and portability issues across microcontroller platforms. We present NexLattice, a decentralized mesh networking approach that runs on commodity Wi-Fi hardware using standard MicroPython firmware without custom kernels. Peers discover each other through periodic UDP broadcasts, establish per-peer session keys, and forward JSON-encoded messages over UDP with hop limits and duplicate suppression. A companion Flask dashboard aggregates node health over HTTP and pushes live topology updates to browsers over WebSockets. We describe the architecture, message types, security model, and failure-handling behavior, and we outline how the included software simulator supports repeatable tests without embedded hardware. This work is intended as a reproducible reference implementation and design study for low-latency, gateway-optional IoT mesh communication on Wi-Fi.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Internet of Things, mesh networks, Wi-Fi, MicroPython, UDP, encryption, monitoring
+\end{IEEEkeywords}
+
+\section{Introduction}
+Wireless sensor and actuator networks for smart homes, light industrial monitoring, and environmental sensing often require device-to-device reachability when links to the Internet are intermittent or undesirable. Centralized hub architectures simplify routing but concentrate trust and availability. Mesh-style connectivity improves resilience but frequently depends on specialized protocols, vendor SDKs, or firmware that is difficult to audit or port.
+
+NexLattice targets a pragmatic middle ground: an application-layer protocol on standard IEEE 802.11 infrastructure mode connectivity, implemented in MicroPython on ESP32-class devices. Nodes communicate as ordinary Wi-Fi stations on the same access network, using UDP for discovery and data plane traffic, AES symmetric encryption for payloads, and a simple distance-vector style next-hop table with controlled flooding as a fallback. A separate monitoring service collects statistics and visualizes the evolving graph of peers.
+
+This paper summarizes the system as documented and implemented in the open-source NexLattice repository \cite{nexlattice}. Our contributions are: (1) a concrete end-to-end design from discovery through multi-hop forwarding and loop prevention; (2) a security model suitable for classroom and laboratory prototypes, with explicit notes on production hardening; (3) a reproducible toolchain comprising device code, a network simulator, and a web dashboard.
+
+\section{Related Work}
+Wi-Fi mesh at the link layer appears in standards such as IEEE 802.11s for multihop forwarding among mesh points \cite{ieee80211}. In contrast, NexLattice assumes each node associates to an existing access point as a station and builds logical adjacency using IP-level UDP messaging, which avoids dependence on 802.11s hardware support while remaining compatible with common home and enterprise access networks.
+
+Classic ad hoc routing families include distance-vector and link-state algorithms, as well as on-demand protocols such as AODV \cite{aodv}. NexLattice uses an intentionally small routing table learned implicitly from discovery traffic, rather than a full proactive routing protocol, trading optimality for implementation size on microcontrollers.
+
+Lightweight operating environments for IoT include MicroPython \cite{micropython} and vendor SDKs. NexLattice emphasizes portability within the MicroPython ecosystem and documents encryption using available cryptographic primitives on ESP32.
+
+\section{System Architecture}
+NexLattice separates three concerns: the device layer (peer discovery, secure channels, forwarding), an optional monitoring layer (HTTP ingestion and WebSocket fan-out), and a development simulator that models multiple logical nodes in one process.
+
+\subsection{Device Layer}
+Each node runs a main control loop that initializes Wi-Fi, starts a UDP listener for discovery and data ports, and dispatches parsed JSON messages to handlers. Subsystems include a network manager (sockets, peer registry, latency probes), a crypto helper (key material and encrypt or decrypt), and a message router (next-hop selection, hop count, cache-based loop suppression). Configuration is JSON-based and includes identifiers, Wi-Fi credentials, dashboard endpoint, timers, peer limits, and encryption flags.
+
+\subsection{Monitoring Layer}
+Nodes periodically POST structured status to the dashboard, including peer lists and counters. The dashboard server maintains aggregated state, derives an approximate topology for visualization, and notifies browser clients in real time. This path is observability-only: it does not participate in user data forwarding, preserving a decentralized data plane.
+
+\subsection{Simulator}
+A Python simulator instantiates multiple virtual nodes, connects them according to a chosen topology, injects traffic, and can report events to the dashboard. This supports demonstration and regression-style experiments when hardware is unavailable.
+
+\section{Protocol Design}
+All protocol messages share a JSON envelope with a type field, sender node identifier, and timestamp. Optional fields depend on the type. Transport uses UDP on configurable ports; discovery uses broadcast while data traffic uses unicast to the next hop IP address.
+
+\subsection{Discovery and Adjacency}
+Nodes emit DISCOVERY messages on a fixed interval. Recipients that accept the peer add or refresh an entry and may respond with DISCOVERY\_RESPONSE. Public key material is advertised during discovery to support subsequent key agreement. This yields a peer table without a central registrar, subject to the constraints of the underlying LAN (for example, client isolation features on some access points may block device-to-device traffic).
+
+\subsection{Session Establishment}
+After mutual visibility, nodes exchange KEY\_EXCHANGE payloads to converge on per-peer session keys used for symmetric encryption of DATA messages. The reference implementation documents AES in CBC mode with random IV prepended to ciphertext. A pre-shared key fallback exists for constrained setups; deployments should replace default secrets and plan for rotation.
+
+\subsection{Routing and Forwarding}
+When a DATA message arrives, the router checks whether the destination is a direct peer. If not, it consults a routing table mapping destination identifiers to next-hop peers. If no entry exists, the implementation may flood copies to all peers except the immediate sender, subject to hop limits. Each forward increments a hop counter; messages exceeding a configured maximum are dropped. A message cache keyed by message identifier with time-to-live suppresses duplicates and mitigates transient routing loops.
+
+\subsection{Health Monitoring}
+PING and PONG messages support RTT estimation. Stale peers transition through warning to removal time-outs, triggering table updates and dashboard-visible status changes.
+
+\subsection{Dashboard Reporting}
+STATS payloads summarize sent, received, and forwarded message counts, uptime, and neighbor metadata. The dashboard correlates reports to render node cards, link lists, and a force-directed or similar graph view in the web client.
+
+\section{Implementation Notes}
+The reference devices target ESP32 \cite{esp32} running MicroPython, using Wi-Fi station mode and the Python standard library style APIs exposed by the port. The dashboard uses Flask with a WebSocket extension and client-side JavaScript for visualization. Requirements are pinned in the project for reproducible Python environments.
+
+Table~\ref{tab:messages} summarizes primary message types. Table~\ref{tab:params} lists representative timing and policy defaults from the project documentation.
+
+\begin{table}[htbp]
+\caption{NexLattice message types at the application layer.}
+\label{tab:messages}
+\begin{center}
+\begin{tabular}{l l p{4.2cm}}
+\hline
+\textbf{Type} & \textbf{Role} & \textbf{Notes} \\
+\hline
+DISCOVERY & Peer finding & UDP broadcast \\
+DISCOVERY\_RESPONSE & Adjacency confirm & UDP unicast \\
+KEY\_EXCHANGE & Session setup & Establishes symmetric keys \\
+DATA & User payload & Encrypted when enabled \\
+PING / PONG & Liveness & Latency sampling \\
+STATS & Telemetry & HTTP POST to dashboard \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{table}[htbp]
+\caption{Representative default parameters (configurable per node).}
+\label{tab:params}
+\begin{center}
+\begin{tabular}{l c}
+\hline
+\textbf{Parameter} & \textbf{Typical value} \\
+\hline
+Discovery interval & 30 s \\
+Health check interval & 10 s \\
+Peer timeout & 120 s \\
+Maximum hops & 5 \\
+Maximum peers per node & 10 \\
+Message cache TTL & 60 s \\
+Dashboard report interval & 60 s \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+
+\section{Evaluation and Discussion}
+The NexLattice repository states design targets for discovery completion time, one-hop latency, delivery success, throughput, and memory footprint on ESP32. These figures should be understood as project-reported goals and informal measurements gathered during development rather than a formal benchmark suite. The simulator enables qualitative validation of multi-hop paths, failure injection, and dashboard integration under idealized timing.
+
+\subsection{Security Considerations}
+The documented model provides confidentiality for payloads between peers that have completed key exchange using symmetric encryption. It does not, by itself, offer the assurances of a full public-key infrastructure, mutual TLS, or hardware-backed storage. Production deployments should address authenticated key distribution, replay resistance where needed, rate limiting, secure provisioning, and compliance with organizational policies. The architecture documentation explicitly lists these as extensions.
+
+\subsection{Limitations}
+Operation depends on a shared Layer-2 broadcast domain or workable unicast paths among associated stations. UDP provides no guaranteed delivery; reliability features such as acknowledgments and retransmissions remain future work in the project roadmap. Routing is simplified relative to large-scale mesh standards and may not scale to dense topologies without additional congestion control.
+
+\section{Conclusion}
+NexLattice demonstrates that a transparent, gateway-optional mesh abstraction can be built on ubiquitous Wi-Fi and MicroPython, pairing encrypted UDP messaging with pragmatic routing and an operator-facing dashboard. The open-source artifacts lower the barrier to classroom and laboratory experimentation. Future work includes adaptive routing metrics, quality-of-service classes, over-the-air updates, and stronger authentication aligned with operational security practice.
+
+\section*{Acknowledgment}
+NexLattice was developed as a team project at Assam down town University, Guwahati. Debayangshu Sen led the software architecture, implementation, and integration; co-authors Vivek Upadhaya and Rajdeep Roy collaborated on the overall project effort. The authors thank the MicroPython project and the ESP32 developer community for accessible tooling and documentation. They thank Dr. Debashis Dev Misra, Associate Professor, Faculty of Computer Technology, for supervision and manuscript feedback.
+
+\begin{thebibliography}{00}
+\bibitem{ieee80211} IEEE Standard for Information Technology---Telecommunications and Information Exchange Between Systems---Local and Metropolitan Area Networks---Specific Requirements---Part 11: Wireless LAN Medium Access Control (MAC) and Physical Layer (PHY) Specifications, IEEE Std 802.11-2020, 2021.
+\bibitem{aodv} C.~E. Perkins, E.~M. Belding-Royer, and S.~Das, ``Ad hoc on-demand distance vector (AODV) routing,'' RFC 3561, Internet Engineering Task Force, 2003.
+\bibitem{micropython} D.~George and contributors, ``MicroPython,'' \url{https://micropython.org}, accessed 2025.
+\bibitem{esp32} Espressif Systems, ``ESP32 Series Datasheet,'' \url{https://www.espressif.com}, accessed 2025.
+\bibitem{nexlattice} D. Sen, V. Upadhaya, R. Roy, and D. D. Misra, ``NexLattice: Wi-Fi mesh networking for IoT devices,'' open-source software repository, 2025.
+\end{thebibliography}
+
+\end{document}
