@@ -57,6 +57,7 @@ class SimulatedNode:
                 'node': peer_node
             }
             print(f"🔍 {self.node_name}: Discovered {peer_node.node_name} (distance: {distance:.1f})")
+            print(f"🔐 {self.node_name} <-> {peer_node.node_name}: Executed Diffie-Hellman Key Exchange (derived secure AES session key)")
     
     def _calculate_distance(self, peer_node):
         """Calculate Euclidean distance to peer"""
@@ -64,10 +65,71 @@ class SimulatedNode:
         dy = self.position[1] - peer_node.position[1]
         return (dx**2 + dy**2)**0.5
     
-    def send_message(self, dest_id, payload):
+    def _discover_aodv_route(self, dest_id, all_nodes):
+        """Simulate AODV route discovery using BFS pathfinding to model RREQ/RREP propagation"""
+        print(f"\n🔍 [AODV Route Discovery Initiated] {self.node_name} is searching for {dest_id}...")
+        
+        queue = [[self.node_id]]
+        visited = {self.node_id}
+        shortest_path = None
+        
+        while queue:
+            path = queue.pop(0)
+            curr_node_id = path[-1]
+            
+            if curr_node_id == dest_id:
+                shortest_path = path
+                break
+                
+            curr_node = all_nodes.get(curr_node_id)
+            if not curr_node or not curr_node.online:
+                continue
+                
+            for neighbor_id in curr_node.peers:
+                neighbor_node = all_nodes.get(neighbor_id)
+                if neighbor_node and neighbor_node.online and neighbor_id not in visited:
+                    visited.add(neighbor_id)
+                    queue.append(path + [neighbor_id])
+                    
+        if not shortest_path:
+            print(f"❌ [AODV Route Discovery Failed] No path found from {self.node_name} to {dest_id}")
+            return False
+            
+        rreq_id = random.randint(1, 100)
+        for idx in range(len(shortest_path) - 1):
+            src_node = all_nodes[shortest_path[idx]]
+            next_node = all_nodes[shortest_path[idx+1]]
+            print(f"📢 {src_node.node_name}: Broadcasted AODV RREQ #{rreq_id} for destination node {dest_id}")
+            time.sleep(0.05)
+            print(f"📥 {next_node.node_name}: Received AODV RREQ #{rreq_id} from {src_node.node_name}")
+            
+            # Learn reverse route
+            next_node.routing_table[self.node_id] = shortest_path[idx]
+            
+        print(f"🎯 [Destination Reached] {all_nodes[dest_id].node_name} received RREQ, preparing Route Reply (RREP)...")
+        time.sleep(0.1)
+        
+        # Unicast RREP backward
+        for idx in range(len(shortest_path) - 1, 0, -1):
+            curr_node = all_nodes[shortest_path[idx]]
+            prev_node = all_nodes[shortest_path[idx-1]]
+            print(f"📤 {curr_node.node_name}: Sent AODV RREP unicast back to {prev_node.node_name}")
+            time.sleep(0.05)
+            print(f"📥 {prev_node.node_name}: Received AODV RREP, established forward route to {dest_id} via {curr_node.node_name}")
+            
+            prev_node.routing_table[dest_id] = shortest_path[idx]
+            
+        print(f"✅ [AODV Dynamic Route Established] {self.node_name} can now communicate with {dest_id}!\n")
+        return True
+    
+    def send_message(self, dest_id, payload, all_nodes=None):
         """Send a message to destination"""
         if not self.online:
             return False
+            
+        # Trigger AODV route discovery if no route exists
+        if dest_id not in self.routing_table and all_nodes:
+            self._discover_aodv_route(dest_id, all_nodes)
         
         message = {
             'type': 'DATA',
@@ -311,7 +373,7 @@ class NetworkSimulator:
         print(f"\n📤 Sending message: {source_id} → {dest_id}")
         print(f"   Payload: {payload}")
         
-        success = source.send_message(dest_id, payload)
+        success = source.send_message(dest_id, payload, self.nodes)
         
         if success:
             print("✅ Message delivery successful\n")

@@ -22,6 +22,10 @@ class CryptoManager:
         """Initialize crypto manager"""
         self.node_id = node_id
         
+        # Diffie-Hellman Parameters (128-bit safe prime and generator)
+        self.P = 340282366920938463463374607431768211297
+        self.G = 2
+        
         # Generate or load keys
         self.private_key = self._generate_private_key()
         self.public_key = self._derive_public_key(self.private_key)
@@ -44,34 +48,39 @@ class CryptoManager:
         print(f"🔐 Crypto initialized for {node_id}")
     
     def _generate_private_key(self):
-        """Generate a private key"""
-        # In a real implementation, this would generate a proper RSA/ECC key
-        # For MicroPython, we'll use a simple approach
-        key = uhashlib.sha256(self.node_id.encode() + str(urandom.getrandbits(32)).encode()).digest()
-        return key
+        """Generate a private key (Diffie-Hellman private exponent)"""
+        # Generate random 128-bit integer
+        private_key = (urandom.getrandbits(128) % (self.P - 3)) + 2
+        return private_key
     
     def _derive_public_key(self, private_key):
-        """Derive public key from private key"""
-        # Simplified: in reality, use proper asymmetric crypto
-        public = uhashlib.sha256(private_key + b'public').hexdigest()
-        return public
+        """Derive public key from private key (G^private_key % P)"""
+        public_key = pow(self.G, private_key, self.P)
+        return str(public_key)
     
     def get_public_key(self):
         """Get public key for sharing"""
         return self.public_key
     
-    def establish_session(self, peer_id, peer_session_data):
-        """Establish encrypted session with peer"""
-        # In production, implement proper Diffie-Hellman or similar
-        # For now, use a derived shared key
-        shared_secret = uhashlib.sha256(
-            self.private_key + 
-            peer_session_data.encode() + 
-            peer_id.encode()
-        ).digest()
-        
-        self.session_keys[peer_id] = shared_secret
-        return True
+    def establish_session(self, peer_id, peer_public_key):
+        """Establish encrypted session with peer using Diffie-Hellman"""
+        try:
+            # peer_public_key is the public exponent of the peer
+            peer_pub = int(peer_public_key)
+            
+            # Shared secret: K = peer_pub^private_key % P
+            shared_secret_int = pow(peer_pub, self.private_key, self.P)
+            
+            # Convert to bytes and hash to derive 32-byte AES key
+            secret_bytes = str(shared_secret_int).encode()
+            shared_key = uhashlib.sha256(secret_bytes).digest()
+            
+            self.session_keys[peer_id] = shared_key
+            print(f"🔐 secure session established with {peer_id} via Diffie-Hellman")
+            return True
+        except Exception as e:
+            print(f"❌ Diffie-Hellman key exchange failed: {e}")
+            return False
     
     def encrypt(self, plaintext, peer_id=None):
         """Encrypt data for transmission"""
@@ -160,35 +169,35 @@ class CryptoManager:
         return decrypted.decode()
     
     def sign_message(self, message):
-        """Create message signature (HMAC-SHA256)"""
-        # Create HMAC-style signature using private key
+        """Create message signature (HMAC-SHA256) using PSK"""
         if isinstance(message, dict):
-            message_str = json.dumps(message, sort_keys=True)
+            msg_copy = message.copy()
+            msg_copy.pop('signature', None)
+            message_str = json.dumps(msg_copy, sort_keys=True)
         elif isinstance(message, str):
             message_str = message
         else:
             message_str = str(message)
         
-        # HMAC: Hash(message + private_key)
-        signature = uhashlib.sha256(message_str.encode() + self.private_key).hexdigest()
+        # HMAC-style signing using PSK
+        signature = uhashlib.sha256(message_str.encode() + self.psk).hexdigest()
         return signature
     
     def verify_signature(self, message, signature, peer_id=None):
-        """Verify message signature"""
+        """Verify message signature using PSK"""
         if not signature or len(signature) != 64:  # SHA256 hex length
             return False
         
-        # Get peer's public key if available (for proper verification)
-        # For now, we verify using our PSK-based approach
         if isinstance(message, dict):
-            message_str = json.dumps(message, sort_keys=True)
+            # Create a copy and remove signature if present to match signing state
+            msg_copy = message.copy()
+            msg_copy.pop('signature', None)
+            message_str = json.dumps(msg_copy, sort_keys=True)
         elif isinstance(message, str):
             message_str = message
         else:
             message_str = str(message)
         
-        # Recompute expected signature using PSK (simplified)
-        # In production, use peer's public key for proper verification
         expected_sig = uhashlib.sha256(message_str.encode() + self.psk).hexdigest()
         
         # Constant-time comparison to prevent timing attacks

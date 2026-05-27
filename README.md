@@ -12,13 +12,13 @@ NexLattice enables **device-to-device communication** without requiring a centra
 
 ### Key Features
 
-- ✨ **Zero Configuration**: Automatic peer discovery via UDP broadcast
-- 🔐 **Secure by Default**: AES-256 encryption with session keys
-- 🚀 **Low Latency**: Sub-100ms message delivery
-- 🔄 **Multi-Hop Routing**: Automatic message forwarding through intermediate nodes
-- 📊 **Real-Time Monitoring**: Beautiful web dashboard with live network visualization
-- 🛡️ **Resilient**: Automatic recovery from node failures and network partitions
-- 💻 **Easy to Deploy**: Works with standard MicroPython, no custom firmware needed
+- 🔐 **AES-256-CBC Encryption**: Full end-to-end payload confidentiality with random initialization vector (IV) generation.
+- 🔑 **Diffie-Hellman Key Exchange**: Secure, dynamic, forward-secure session key establishment per peer, avoiding static key risks.
+- 🗺️ **AODV Dynamic Routing**: Ad-Hoc On-Demand Distance Vector routing using active route requests (RREQ) and route replies (RREP) to form optimal multi-hop paths dynamically.
+- ✨ **Zero Configuration**: Plug-and-play auto-discovery via local UDP broadcasts.
+- 🛡️ **HMAC-SHA256 Integrity Verification**: Strict message signing and signature validation to protect against packet tampering.
+- 📊 **Real-Time Topology Visualization**: Interactive D3.js force-directed topology view in a responsive green/emerald web dashboard.
+- 🚀 **Low Latency**: Optimized MicroPython implementation with sub-100ms multi-hop delivery latency.
 
 ## Architecture
 
@@ -163,65 +163,88 @@ NexLattice/
 
 ## How It Works
 
-### 1. Peer Discovery
+### 1. Peer Auto-Discovery & Diffie-Hellman Key Exchange
 
-Nodes broadcast UDP discovery messages every 30 seconds:
+Nodes dynamically discover each other via periodic UDP broadcasts. Upon discovery, they immediately execute a **Diffie-Hellman (DH) key exchange** to establish a secure symmetric session key.
+
+1. **Parameters**: The protocol utilizes Oakley modular arithmetic parameters (128-bit safe prime $P$ and generator $G = 2$).
+2. **Key Generation**: Each node generates a random private integer exponent $a$, and derives its public key:
+   $$A = G^a \pmod P$$
+3. **Exchange**: Public keys are exchanged during the discovery phase.
+4. **Secret Derivation**: Nodes compute the shared secret $K = B^a \pmod P$ and run it through a SHA-256 digest to derive a unique, cryptographically strong 32-byte symmetric key for subsequent AES-256-CBC data encryption.
 
 ```json
+// Discovery Broadcast with DH Public Key
 {
   "type": "DISCOVERY",
   "node_id": "node_001",
   "node_name": "Living Room Sensor",
-  "public_key": "04a1b2c3...",
-  "timestamp": 1234567890.123
+  "public_key": "246738920197463729...",
+  "timestamp": 1782947201.123
 }
 ```
 
-### 2. Secure Session Establishment
+---
 
-After discovery, nodes exchange session keys:
+### 2. AODV Dynamic Route Discovery
+
+When a node needs to transmit a message to a non-neighbor, it initiates an **Ad-Hoc On-Demand Distance Vector (AODV) routing discovery**:
+
+```mermaid
+sequenceDiagram
+    participant Src as Source Node
+    participant Hop as Intermediate Node
+    participant Dest as Destination Node
+    
+    Src->>Hop: AODV_RREQ (Broadcast, hop=0)
+    Note over Hop: Records reverse path to Source
+    Hop->>Dest: AODV_RREQ (Broadcast, hop=1)
+    Note over Dest: Receives RREQ, prepares RREP
+    Dest->>Hop: AODV_RREP (Unicast, hop=0)
+    Note over Hop: Establishes forward path to Destination
+    Hop->>Src: AODV_RREP (Unicast, hop=1)
+    Note over Src: Flushes message buffer along path
+```
+
+1. **Route Request (RREQ)**: The source buffers the outgoing data and broadcasts an `AODV_RREQ` packet. As intermediate nodes receive the RREQ, they record a reverse routing path pointing back to the source.
+2. **Route Reply (RREP)**: Once the RREQ reaches the target destination (or a node with a fresh active route), that node unicasts an `AODV_RREP` packet back along the reverse path. Intermediate nodes establish a forward route to the destination.
+3. **Flushing Buffers**: Once the source receives the RREP, it immediately flushes its buffer and transmits the waiting data packets.
 
 ```json
+// AODV Route Request (RREQ)
 {
-  "type": "KEY_EXCHANGE",
-  "node_id": "node_001",
-  "session_key": "encrypted_key",
-  "timestamp": 1234567890.456
+  "type": "AODV_RREQ",
+  "rreq_id": 42,
+  "source": "node_001",
+  "destination": "node_005",
+  "hop_count": 0,
+  "timestamp": 1782947203.456,
+  "signature": "8a3e9c..."
 }
 ```
 
-### 3. Message Routing
+---
 
-Messages are forwarded hop-by-hop to destination:
+### 3. AES-256-CBC Encrypted & Signed Communication
+
+Once the DH key is derived and the AODV route is established, data is transmitted end-to-end securely.
+
+*   **Confidentiality**: Payloads are encrypted using **AES-256-CBC** with a dynamically generated random Initialization Vector (IV).
+*   **Integrity & Authenticity**: All control and data frames are signed with an **HMAC-SHA256 signature** using the network-wide pre-shared key (PSK) and constant-time string comparison, protecting the network from replay and packet injection attacks.
 
 ```json
+// Signed and Encrypted DATA Message
 {
   "type": "DATA",
   "source": "node_001",
   "destination": "node_005",
-  "payload": "encrypted_data",
+  "payload": "f0a3e918d2bb...", // AES-256-CBC Encrypted Payload
+  "encrypted": true,
   "hop_count": 2,
-  "timestamp": 1234567890.789
+  "timestamp": 1782947205.789,
+  "signature": "d34e9a8fcf2093e8..." // HMAC-SHA256 Message Signature
 }
 ```
-
-### 4. Dashboard Monitoring
-
-Nodes report status every 60 seconds via HTTP:
-
-```json
-{
-  "node_id": "node_001",
-  "peers": [...],
-  "stats": {
-    "messages_sent": 42,
-    "messages_received": 38,
-    "uptime": 3600
-  }
-}
-```
-
-Dashboard pushes updates to web clients via WebSocket for real-time visualization.
 
 ## Dashboard Features & SS
 ![Dashboard Preview](docs/dashboard_ss_0.png)

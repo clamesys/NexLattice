@@ -84,6 +84,10 @@ class NexLatticeNode:
                 self.handle_data_message(msg_data, sender_addr)
             elif msg_type == 'PING':
                 self.handle_ping(msg_data, sender_addr)
+            elif msg_type == 'AODV_RREQ':
+                self.handle_aodv_rreq(msg_data, sender_addr)
+            elif msg_type == 'AODV_RREP':
+                self.handle_aodv_rrep(msg_data, sender_addr)
             
             self.stats['messages_received'] += 1
             
@@ -327,6 +331,24 @@ class NexLatticeNode:
             except Exception as e:
                 print(f"⚠️  Could not report stats: {e}")
     
+    def handle_aodv_rreq(self, msg_data, sender_addr):
+        """Handle incoming AODV Route Request (RREQ)"""
+        signature = msg_data.get('signature')
+        if not signature or not self.crypto.verify_signature(msg_data, signature, msg_data.get('source')):
+            print("🚫 Rejecting RREQ: Invalid signature")
+            return
+        
+        self.router.handle_rreq(msg_data, sender_addr[0])
+
+    def handle_aodv_rrep(self, msg_data, sender_addr):
+        """Handle incoming AODV Route Reply (RREP)"""
+        signature = msg_data.get('signature')
+        if not signature or not self.crypto.verify_signature(msg_data, signature, msg_data.get('destination')):
+            print("🚫 Rejecting RREP: Invalid signature")
+            return
+            
+        self.router.handle_rrep(msg_data, sender_addr[0])
+        
     def stop(self):
         """Stop the node gracefully"""
         self.running = False
